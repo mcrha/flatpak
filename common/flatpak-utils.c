@@ -3167,8 +3167,8 @@ flatpak_repo_save_digested_summary_delta (OstreeRepo   *repo,
 }
 
 
-static gboolean
-is_flatpak_ref (const char *ref)
+gboolean
+flatpak_is_app_runtime_or_appstream_ref (const char *ref)
 {
   return
     g_str_has_prefix (ref, "appstream/") ||
@@ -3283,7 +3283,7 @@ populate_commit_data_cache (OstreeRepo *repo,
           VarVariantRef xa_data_v;
           VarCacheDataRef xa_data;
 
-          if (!is_flatpak_ref (ref))
+          if (!flatpak_is_app_runtime_or_appstream_ref (ref))
             continue;
 
           commit_bytes = var_ref_info_peek_checksum (info, &commit_bytes_len);
@@ -4357,7 +4357,7 @@ generate_summary (OstreeRepo   *repo,
       if (!g_hash_table_contains (commits, rev))
         continue; /* Filter out commit (by arch & subset) */
 
-      if (is_flatpak_ref (ref))
+      if (flatpak_is_app_runtime_or_appstream_ref (ref))
         rev_data = g_hash_table_lookup (commit_data_cache, rev);
 
       if (rev_data != NULL)
@@ -4798,7 +4798,7 @@ flatpak_repo_update (OstreeRepo   *repo,
         g_hash_table_add (arches, g_steal_pointer (&arch));
 
       /* Add CommitData for flatpak refs that we didn't already pre-populate */
-      if (is_flatpak_ref (ref))
+      if (flatpak_is_app_runtime_or_appstream_ref (ref))
         {
           rev_data = g_hash_table_lookup (commit_data_cache, rev);
           if (rev_data == NULL)

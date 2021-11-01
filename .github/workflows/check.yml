@@ -152,11 +152,33 @@ jobs:
         libjson-glib-dev shared-mime-info desktop-file-utils libpolkit-agent-1-dev libpolkit-gobject-1-dev \
         libseccomp-dev libsoup2.4-dev libsystemd-dev libxml2-utils libgpgme11-dev gobject-introspection \
         libgirepository1.0-dev libappstream-glib-dev libdconf-dev clang socat meson libdbus-1-dev \
-        valgrind e2fslibs-dev
+        e2fslibs-dev
+        sudo apt-get install -y autoconf automake autopoint autotools-dev binutils binutils-common binutils-x86-64-linux-gnu \
+        build-essential cpp-8 debhelper dh-autoreconf dh-strip-nondeterminism docbook docbook-xsl dpkg-dev dwz g++ g++-9 gcc \
+        gcc-8 gcc-8-base gcc-9 gcc-9-multilib gcc-multilib gettext gfortran-8 ibverbs-providers intltool-debian lib32asan5 \
+        lib32atomic1 lib32gcc-9-dev lib32gcc-s1 lib32gomp1 lib32itm1 lib32quadmath0 lib32stdc++6 lib32ubsan1 \
+        libarchive-zip-perl libasan5 libatomic1 libbinutils libc-dev-bin libc6-dev libc6-dev-i386 libc6-dev-x32 libc6-i386 \
+        libc6-x32 libcroco3 libcrypt-dev libctf-nobfd0 libctf0 libdebhelper-perl libevent-core-2.1-7 libevent-dev \
+        libevent-extra-2.1-7 libevent-openssl-2.1-7 libevent-pthreads-2.1-7 libfabric1 libfile-stripnondeterminism-perl \
+        libgcc-8-dev libgcc-9-dev libgfortran-8-dev libgfortran5 libhwloc-dev libhwloc-plugins libhwloc15 libibverbs-dev \
+        libibverbs1 libitm1 liblsan0 libltdl-dev libmpx2 libnl-3-dev libnl-route-3-dev libnuma-dev libopenmpi-dev libopenmpi3 \
+        libpmix2 libpsm-infinipath1 libpsm2-2 libquadmath0 librdmacm1 libsigsegv2 libstdc++-9-dev libsub-override-perl libtool \
+        libtsan0 libubsan1 libx32asan5 libx32atomic1 libx32gcc-9-dev libx32gcc-s1 libx32gomp1 libx32itm1 libx32quadmath0 \
+        libx32stdc++6 libx32ubsan1 libxnvctrl0 linux-libc-dev m4 make mpi-default-dev ocl-icd-libopencl1 openmpi-bin \
+        openmpi-common po-debconf xsltproc libc6-dbg libc6-dbg-i386-cross # valgrind build dependencies
     - name: Check out flatpak
       uses: actions/checkout@v1
       with:
         submodules: true
+    - name: Build valgrind # to avoid https://bugs.kde.org/show_bug.cgi?id=369029
+      run: |
+        git clone --branch VALGRIND_3_18_1 --depth 1 git://sourceware.org/git/valgrind.git ./valgrind
+        pushd ./valgrind
+        NOCONFIGURE=1 ./autogen.sh
+        ./configure --prefix=/usr --libdir=/usr/lib/x86_64-linux-gnu --sysconfdir=/etc --localstatedir=/var
+        make -j $(getconf _NPROCESSORS_ONLN)
+        sudo make install
+        popd
     - name: Build ostree dependency
       run: |
         git clone --branch v2020.8 --depth 1 --no-tags https://github.com/ostreedev/ostree.git ./ostree

@@ -11389,6 +11389,7 @@ flatpak_dir_remote_save_cached_summary (FlatpakDir   *self,
 static gboolean
 flatpak_dir_remote_load_cached_summary (FlatpakDir   *self,
                                         const char   *basename,
+                                        const char   *checksum,
                                         const char   *main_ext,
                                         const char   *sig_ext,
                                         GBytes      **out_main,
@@ -11402,6 +11403,8 @@ flatpak_dir_remote_load_cached_summary (FlatpakDir   *self,
   g_autoptr(GFile) sig_cache_file = flatpak_build_file (self->cache_dir, "summaries", sig_file_name, NULL);
   g_autoptr(GMappedFile) mfile = NULL;
   g_autoptr(GMappedFile) sig_mfile = NULL;
+  g_autoptr(GBytes) mfile_bytes = NULL;
+  g_autofree char *sha256 = NULL;
 
   mfile = g_mapped_file_new (flatpak_file_get_path_cached (main_cache_file), FALSE, NULL);
   if (mfile == NULL)
@@ -11414,7 +11417,29 @@ flatpak_dir_remote_load_cached_summary (FlatpakDir   *self,
   if (out_sig)
     sig_mfile = g_mapped_file_new (flatpak_file_get_path_cached (sig_cache_file), FALSE, NULL);
 
-  *out_main = g_mapped_file_get_bytes (mfile);
+  mfile_bytes = g_mapped_file_get_bytes (mfile);
+
+  /* The checksum would've already been verified before the file was written,
+   * but check again in case something went wrong during disk I/O. This is
+   * especially important since the variant-schema-compiler code assumes the
+   * GVariant data is well formed and asserts otherwise.
+   */
+  if (checksum != NULL)
+    {
+      sha256 = g_compute_checksum_for_bytes (G_CHECKSUM_SHA256, mfile_bytes);
+      if (strcmp (sha256, checksum) != 0)
+        {
+          g_file_delete (main_cache_file, NULL, NULL);
+          if (sig_ext)
+            g_file_delete (sig_cache_file, NULL, NULL);
+
+          return flatpak_fail_error (error, FLATPAK_ERROR_INVALID_DATA,
+                                     _("Invalid checksum for indexed summary %s read from %s"),
+                                     checksum, flatpak_file_get_path_cached (main_cache_file));
+        }
+    }
+
+  *out_main = g_steal_pointer (&mfile_bytes);
   if (sig_mfile)
     *out_sig = g_mapped_file_get_bytes (sig_mfile);
 
@@ -11465,7 +11490,7 @@ flatpak_dir_remote_fetch_summary (FlatpakDir   *self,
     {
       if (only_cached)
         {
-          if (!flatpak_dir_remote_load_cached_summary (self, name_or_uri, NULL, ".sig",
+          if (!flatpak_dir_remote_load_cached_summary (self, name_or_uri, NULL, NULL, ".sig",
                                                        &summary, &summary_sig, cancellable, error))
             return FALSE;
           g_debug ("Loaded summary from cache for remote ‘%s’", name_or_uri);
@@ -11622,7 +11647,7 @@ flatpak_dir_remote_fetch_summary_index (FlatpakDir   *self,
   if (error == NULL)
     error = &local_error;
 
-  flatpak_dir_remote_load_cached_summary (self, name_or_uri, ".idx", ".idx.sig",
+  flatpak_dir_remote_load_cached_summary (self, name_or_uri, NULL, ".idx", ".idx.sig",
                                           &cached_index, &cached_index_sig, cancellable, &cache_error);
 
   if (only_cached)
@@ -11773,7 +11798,7 @@ flatpak_dir_remote_fetch_indexed_summary (FlatpakDir   *self,
   cache_name = g_strconcat (name_or_uri, "-", arch, "-", checksum, NULL);
 
   /* First look for an on-disk cache */
-  if (!flatpak_dir_remote_load_cached_summary (self, cache_name, ".sub", NULL,
+  if (!flatpak_dir_remote_load_cached_summary (self, cache_name, checksum, ".sub", NULL,
                                                &summary, NULL, cancellable, &cache_error))
     {
       g_autofree char *old_checksum = NULL;
@@ -11799,7 +11824,7 @@ flatpak_dir_remote_fetch_indexed_summary (FlatpakDir   *self,
 
           old_checksum = ostree_checksum_from_bytes (var_checksum_peek (old));
           old_cache_name = g_strconcat (name_or_uri, "-", arch, "-", old_checksum, NULL);
-          if (flatpak_dir_remote_load_cached_summary (self, old_cache_name, ".sub", NULL,
+          if (flatpak_dir_remote_load_cached_summary (self, old_cache_name, old_checksum, ".sub", NULL,
                                                       &old_summary, NULL, cancellable, NULL))
             break;
         }

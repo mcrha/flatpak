@@ -29,6 +29,16 @@
    fun:glnx_regfile_copy_bytes
 }
 
+# sched_getattr is unsupported by valgrind < 3.17.0
+{
+  ignore_sched_getattr_syscall
+  Memcheck:Param
+  syscall(num)
+  fun:syscall
+  fun:seccomp_init
+  fun:setup_seccomp
+}
+
 # There seem to be some leaks in "ostree pull", lets just ignore them for now
 {
   ignore_ostree_pull1
